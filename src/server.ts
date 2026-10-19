@@ -7,6 +7,7 @@ import { serve } from './http/serve.ts';
 import { ensureBootstrap } from './cards/repo.ts';
 import { createSmtpMailer } from './leads/smtp.ts';
 import { startScheduler } from './scheduler.ts';
+import { createS3Store } from './backup/s3.ts';
 
 if (existsSync('.env')) process.loadEnvFile('.env');
 const config = loadConfig(process.env);
@@ -17,5 +18,6 @@ const mailer = createSmtpMailer(config.smtp);
 const deps = { db, config, now: () => new Date(), fetch, mailer };
 const app = createApp(deps);
 serve(app, config.port, config.baseUrl);
-startScheduler(deps);
+startScheduler(deps, config.s3 ? createS3Store(config.s3) : null);
+if (!config.s3) console.warn('Attention : aucune sauvegarde configurée (variables S3_*).');
 console.log(`Carte QR en écoute sur le port ${config.port}`);
