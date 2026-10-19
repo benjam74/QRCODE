@@ -19,11 +19,38 @@ export function createApp(deps: Deps): App {
   adminShareRoutes(router, deps);
   exchangeRoutes(router, deps, (id) => { dispatchLead(deps, id).catch((e) => console.error('Envoi du contact', id, e)); });
   return async (req) => {
+    let res: Response;
     try {
-      return await router.handle(req, notFound);
+      res = await router.handle(req, notFound);
     } catch (e) {
       console.error(e);
-      return new Response('Erreur interne', { status: 500 });
+      res = new Response('Erreur interne', { status: 500 });
     }
+    return withSecurityHeaders(res);
   };
+}
+
+const SECURITY_HEADERS: Record<string, string> = {
+  'x-content-type-options': 'nosniff',
+  'x-frame-options': 'SAMEORIGIN',
+  'referrer-policy': 'strict-origin-when-cross-origin',
+  'strict-transport-security': 'max-age=31536000',
+  'content-security-policy':
+    "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; frame-ancestors 'self'; form-action 'self'; base-uri 'none'; object-src 'none'",
+};
+
+function withSecurityHeaders(res: Response): Response {
+  if (res.status >= 300 && res.status < 400 && !res.body) {
+    const r = new Response(null, { status: res.status, headers: res.headers });
+    for (const [k, v] of Object.entries(SECURITY_HEADERS)) r.headers.set(k, v);
+    return r;
+  }
+  try {
+    for (const [k, v] of Object.entries(SECURITY_HEADERS)) res.headers.set(k, v);
+    return res;
+  } catch {
+    const r = new Response(res.body, { status: res.status, headers: res.headers });
+    for (const [k, v] of Object.entries(SECURITY_HEADERS)) r.headers.set(k, v);
+    return r;
+  }
 }

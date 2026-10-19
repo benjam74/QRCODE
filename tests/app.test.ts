@@ -16,3 +16,13 @@ test('route inconnue donne 404', async () => {
   const res = await app(new Request('http://x/nope'));
   assert.equal(res.status, 404);
 });
+
+test('en-têtes de sécurité sur toutes les réponses', async () => {
+  const app = createApp({ db: openDb(':memory:'), config: testConfig(), now: () => new Date(), fetch, mailer: { send: async () => {} } });
+  const res = await app(new Request('http://x/health'));
+  assert.equal(res.headers.get('x-content-type-options'), 'nosniff');
+  assert.equal(res.headers.get('x-frame-options'), 'SAMEORIGIN');
+  assert.equal(res.headers.get('referrer-policy'), 'strict-origin-when-cross-origin');
+  assert.match(res.headers.get('content-security-policy') ?? '', /default-src 'self'/);
+  assert.match(res.headers.get('strict-transport-security') ?? '', /max-age=/);
+});
