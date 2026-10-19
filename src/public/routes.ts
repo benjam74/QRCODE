@@ -54,3 +54,63 @@ export function publicRoutes(router: Router, deps: Deps): void {
     });
   });
 }
+
+import { validateLead, validateWaitlist } from '../leads/validate.ts';
+import { createLeadDeduped, addToWaitlist } from '../leads/repo.ts';
+import { createRateLimiter, clientIp } from '../security/rateLimit.ts';
+import { CONSENT_VERSION } from './views/card.ts';
+import { privacyPage, thanksPage, tooManyPage } from './views/privacy.ts';
+
+export async function formFields(req: Request): Promise<Record<string, string>> {
+  const fd = await req.formData();
+  const out: Record<string, string> = {};
+  fd.forEach((v, k) => { if (typeof v === 'string') out[k] = v; });
+  return out;
+}
+
+export type LeadCreatedHook = (leadId: number) => void;
+
+export function exchangeRoutes(router: Router, deps: Deps, onLeadCreated: LeadCreatedHook = () => {}): void {
+  const limiter = createRateLimiter(5, 3_600_000, () => deps.now().getTime());
+  const waitLimiter = createRateLimiter(5, 3_600_000, () => deps.now().getTime());
+
+  router.get('/confidentialite', () => htmlResponse(privacyPage(deps.config.ownerName, deps.config.adminEmail)));
+
+  router.post('/c/:slug/echange', async (ctx) => {
+    const r = resolveCard(deps, ctx);
+    if (r instanceof Response) return r.status === 301 ? redirect(r.headers.get('location') as string, 307) : r;
+    const { card } = r;
+    if (!limiter.hit(clientIp(ctx.req))) return htmlResponse(tooManyPage(card.slug), 429);
+    const fields = await formFields(ctx.req);
+    const v = validateLead(fields);
+    const thanks = () => htmlResponse(thanksPage(card.firstName, card.slug, card.accentColor));
+    if (!v.ok) {
+      if (v.errors._bot) return thanks();
+      const event = fields.event ? findEvent(deps.db, card.id, fields.event) : null;
+      return htmlResponse(renderCardPage({
+        card, baseUrl: deps.config.baseUrl, ownerName: deps.config.ownerName, eventSlug: event ? fields.event : null,
+        exchange: { values: fields, errors: v.errors },
+      }), 422);
+    }
+    const event = v.value.eventSlug ? findEvent(deps.db, card.id, v.value.eventSlug) : null;
+    const created = createLeadDeduped(deps.db, card.id, card.userId, event?.id ?? null, v.value, CONSENT_VERSION, deps.now());
+    if (!created.duplicate) onLeadCreated(created.id);
+    return thanks();
+  });
+
+  router.post('/c/:slug/liste-attente', async (ctx) => {
+    const r = resolveCard(deps, ctx);
+    if (r instanceof Response) return r.status === 301 ? redirect(r.headers.get('location') as string, 307) : r;
+    const { card } = r;
+    if (!waitLimiter.hit(clientIp(ctx.req))) return htmlResponse(tooManyPage(card.slug), 429);
+    const fields = await formFields(ctx.req);
+    const v = validateWaitlist(fields);
+    if (!v.ok) {
+      return htmlResponse(renderCardPage({
+        card, baseUrl: deps.config.baseUrl, ownerName: deps.config.ownerName, eventSlug: null, waitlist: { values: fields, errors: v.errors },
+      }), 422);
+    }
+    addToWaitlist(deps.db, card.userId, v.value.email, deps.now());
+    return htmlResponse(thanksPage(card.firstName, card.slug, card.accentColor, "C'est noté : vous serez prévenu à l'ouverture du service."));
+  });
+}
