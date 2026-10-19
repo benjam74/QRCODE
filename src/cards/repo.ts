@@ -1,19 +1,13 @@
 import { transaction, type Database } from '../db/index.ts';
 import type { Config } from '../config.ts';
+import { slugify } from './slug.ts';
+export { slugify };
 import type { Card, CardFull, CardInput, CardLink, CardField } from './types.ts';
 
 export class SlugTakenError extends Error {
   constructor() { super('Cette adresse est déjà utilisée.'); }
 }
 
-export function slugify(s: string): string {
-  return s
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-}
 
 type CardRow = {
   id: number; user_id: number; slug: string; first_name: string; last_name: string; title_line1: string; title_line2: string;
