@@ -80,3 +80,12 @@ export function adminSession(ctx: ReturnType<typeof makeApp>) {
     },
   };
 }
+
+import { execFileSync } from 'node:child_process';
+import { writeFileSync } from 'node:fs';
+
+export function decodeQr(png: Buffer): string {
+  const f = join(mkdtempSync(join(tmpdir(), 'qr-')), 'q.png');
+  writeFileSync(f, png);
+  return execFileSync('python3', ['-c', 'import cv2,sys;img=cv2.imread(sys.argv[1]);t,_,_=cv2.QRCodeDetector().detectAndDecode(img);print(t,end="")', f]).toString();
+}

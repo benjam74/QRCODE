@@ -59,3 +59,26 @@
   box.addEventListener('pointerup', () => { drag = null; });
   window.addEventListener('resize', () => { if (!wrap.hidden) render(); });
 })();
+
+// Copier la signature (HTML riche) et confirmation des suppressions.
+(() => {
+  const btn = document.getElementById('copy-signature');
+  if (btn && navigator.clipboard && window.ClipboardItem) {
+    btn.hidden = false;
+    btn.addEventListener('click', async () => {
+      const el = document.getElementById(btn.dataset.target);
+      try {
+        await navigator.clipboard.write([new ClipboardItem({
+          'text/html': new Blob([el.innerHTML], { type: 'text/html' }),
+          'text/plain': new Blob([el.innerText], { type: 'text/plain' }),
+        })]);
+        btn.textContent = 'Signature copiée';
+      } catch {
+        btn.textContent = 'Copie impossible : sélectionnez le bloc à la main';
+      }
+    });
+  }
+  document.querySelectorAll('form[data-confirm]').forEach((f) => {
+    f.addEventListener('submit', (e) => { if (!window.confirm(f.dataset.confirm)) e.preventDefault(); });
+  });
+})();

@@ -79,3 +79,44 @@ export function addToWaitlist(db: Database, userId: number, email: string, now: 
   const iso = now.toISOString();
   db.prepare('INSERT OR IGNORE INTO waitlist (user_id, email, consent_at, created_at) VALUES (?, ?, ?, ?)').run(userId, email, iso, iso);
 }
+
+export function listLeads(db: Database, userId: number, eventId?: number): LeadRow[] {
+  const rows = eventId
+    ? db.prepare(`${LEAD_SELECT} WHERE l.user_id = ? AND l.event_id = ? ORDER BY l.created_at DESC, l.id DESC`).all(userId, eventId)
+    : db.prepare(`${LEAD_SELECT} WHERE l.user_id = ? ORDER BY l.created_at DESC, l.id DESC`).all(userId);
+  return (rows as Record<string, unknown>[]).map(toLead);
+}
+
+export function deleteLead(db: Database, userId: number, id: number): boolean {
+  return Number(db.prepare('DELETE FROM leads WHERE id = ? AND user_id = ?').run(id, userId).changes) > 0;
+}
+
+export function resetFolk(db: Database, userId: number, id: number): boolean {
+  return Number(db.prepare("UPDATE leads SET folk_status = 'pending', folk_attempts = 0, folk_next_at = NULL WHERE id = ? AND user_id = ?").run(id, userId).changes) > 0;
+}
+
+export function listEvents(db: Database, cardId: number): EventRow[] {
+  return (db.prepare('SELECT id, name, slug, event_date FROM events WHERE card_id = ? ORDER BY created_at DESC, id DESC').all(cardId) as { id: number; name: string; slug: string; event_date: string | null }[])
+    .map((r) => ({ id: r.id, name: r.name, slug: r.slug, eventDate: r.event_date }));
+}
+
+export function eventStats(db: Database, cardId: number): { eventId: number; name: string; slug: string; eventDate: string | null; scans: number; leads: number }[] {
+  return listEvents(db, cardId).map((e) => ({
+    eventId: e.id, name: e.name, slug: e.slug, eventDate: e.eventDate,
+    scans: (db.prepare('SELECT COALESCE(SUM(count), 0) n FROM scans WHERE card_id = ? AND event_id = ?').get(cardId, e.id) as { n: number }).n,
+    leads: (db.prepare('SELECT COUNT(*) n FROM leads WHERE card_id = ? AND event_id = ?').get(cardId, e.id) as { n: number }).n,
+  }));
+}
+
+export function totalScans(db: Database, cardId: number): number {
+  return (db.prepare('SELECT COALESCE(SUM(count), 0) n FROM scans WHERE card_id = ?').get(cardId) as { n: number }).n;
+}
+
+export type WaitlistRow = { id: number; email: string; createdAt: string };
+export function listWaitlist(db: Database, userId: number): WaitlistRow[] {
+  return (db.prepare('SELECT id, email, created_at FROM waitlist WHERE user_id = ? ORDER BY created_at DESC').all(userId) as { id: number; email: string; created_at: string }[])
+    .map((r) => ({ id: r.id, email: r.email, createdAt: r.created_at }));
+}
+export function deleteWaitlist(db: Database, userId: number, id: number): boolean {
+  return Number(db.prepare('DELETE FROM waitlist WHERE id = ? AND user_id = ?').run(id, userId).changes) > 0;
+}
