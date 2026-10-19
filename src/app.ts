@@ -2,6 +2,7 @@ import type { Database } from './db/index.ts';
 import type { Config } from './config.ts';
 import type { Mailer } from './leads/mailer.ts';
 import { Router } from './http/router.ts';
+import { dispatchLead } from './leads/dispatcher.ts';
 import { publicRoutes, exchangeRoutes, notFound } from './public/routes.ts';
 
 export type Deps = { db: Database; config: Config; now: () => Date; fetch: typeof fetch; mailer: Mailer };
@@ -11,7 +12,7 @@ export function createApp(deps: Deps): App {
   const router = new Router();
   router.get('/health', () => new Response('ok'));
   publicRoutes(router, deps);
-  exchangeRoutes(router, deps);
+  exchangeRoutes(router, deps, (id) => { dispatchLead(deps, id).catch((e) => console.error('Envoi du contact', id, e)); });
   return async (req) => {
     try {
       return await router.handle(req, notFound);
