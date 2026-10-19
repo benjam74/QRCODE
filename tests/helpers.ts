@@ -64,3 +64,19 @@ export function makeApp(over: Partial<Deps> = {}) {
 export function form(data: Record<string, string>, headers: Record<string, string> = {}): RequestInit {
   return { method: 'POST', body: new URLSearchParams(data), headers };
 }
+
+import { createSession } from '../src/auth/repo.ts';
+
+export function adminSession(ctx: ReturnType<typeof makeApp>) {
+  const s = createSession(ctx.db, ctx.userId, ctx.deps.now());
+  const headers = { cookie: `sid=${s.id}` };
+  return {
+    csrf: s.csrf,
+    get: (path: string) => ctx.app(new Request('https://carte.test' + path, { headers })),
+    post: (path: string, data: Record<string, string> | FormData) => {
+      const body = data instanceof FormData ? data : new URLSearchParams(data);
+      if (body instanceof FormData) { if (!body.has('_csrf')) body.set('_csrf', s.csrf); } else if (!body.has('_csrf')) body.set('_csrf', s.csrf);
+      return ctx.app(new Request('https://carte.test' + path, { method: 'POST', body, headers }));
+    },
+  };
+}
