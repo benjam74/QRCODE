@@ -89,7 +89,7 @@ import { toCsv } from './csv.ts';
 import { sharePage, eventsPage, leadsPage, waitlistPage } from './views/pages.ts';
 import { createEvent, findEvent, eventStats, totalScans, listEvents, listLeads, deleteLead, resetFolk, listWaitlist, deleteWaitlist } from '../leads/repo.ts';
 import { dispatchLead } from '../leads/dispatcher.ts';
-import { notFound } from '../public/routes.ts';
+import { notFound, slugRedirect } from '../public/routes.ts';
 
 const frDateTime = (iso: string) => new Date(iso).toLocaleString('fr-FR', { timeZone: 'Europe/Paris' });
 
@@ -122,7 +122,7 @@ export function adminShareRoutes(router: Router, deps: Deps): void {
   router.get('/c/:slug/qr.png', async (ctx) => {
     const r = getCardBySlug(deps.db, ctx.params.slug);
     if (!r) return notFound();
-    if ('redirectTo' in r) return redirect(`/c/${encodeURIComponent(r.redirectTo)}/qr.png`, 301);
+    if ('redirectTo' in r) return slugRedirect(`/c/${encodeURIComponent(r.redirectTo)}/qr.png`);
     const png = await qrPng(`${deps.config.baseUrl}/c/${r.card.slug}`, 160);
     return new Response(png as BodyInit, { headers: { 'content-type': 'image/png', 'cache-control': 'public, max-age=86400' } });
   });

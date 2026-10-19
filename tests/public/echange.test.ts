@@ -61,9 +61,9 @@ test('robot : même réponse, rien en base', async () => {
   assert.equal((db.prepare('select count(*) n from leads').get() as { n: number }).n, 0);
 });
 
-test('6e envoi de la même IP : 429', async () => {
+test('21e contact accepté de la même IP dans l heure : 429', async () => {
   const { app } = makeApp();
-  for (let i = 0; i < 5; i++) assert.equal((await post(app, '/c/benjamin-vallee/echange', { ...BASE, email: `a${i}@ex.ch` }, '10.0.0.9')).status, 200);
+  for (let i = 0; i < 20; i++) assert.equal((await post(app, '/c/benjamin-vallee/echange', { ...BASE, email: `a${i}@ex.ch` }, '10.0.0.9')).status, 200);
   const res = await post(app, '/c/benjamin-vallee/echange', { ...BASE, email: 'z@ex.ch' }, '10.0.0.9');
   assert.equal(res.status, 429);
   assert.ok((await res.text()).includes("Trop d'envois, réessayez dans une heure."));
@@ -94,4 +94,13 @@ test('page de confidentialité', async () => {
   assert.equal(res.status, 200);
   const body = await res.text();
   for (const s of ['Benjamin Vallée', 'benjamin@test.ch', '3 ans', 'Infomaniak', 'Folk', 'effacement']) assert.ok(body.includes(s), s);
+});
+
+test('les envois refusés (validation, doublons) ne consomment pas le quota', async () => {
+  const { app, db } = makeApp();
+  for (let i = 0; i < 25; i++) await post(app, '/c/benjamin-vallee/echange', { ...BASE, consent: '' }, '10.0.0.7');
+  for (let i = 0; i < 25; i++) await post(app, '/c/benjamin-vallee/echange', BASE, '10.0.0.7');
+  const res = await post(app, '/c/benjamin-vallee/echange', { ...BASE, email: 'neuf@ex.ch' }, '10.0.0.7');
+  assert.equal(res.status, 200);
+  assert.equal((db.prepare('select count(*) n from leads').get() as { n: number }).n, 2);
 });

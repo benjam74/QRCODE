@@ -46,7 +46,7 @@ export async function writeResponse(res: ServerResponse, response: Response, hea
   Readable.fromWeb(response.body as import('node:stream/web').ReadableStream).pipe(res);
 }
 
-export function serve(app: (req: Request) => Promise<Response>, port: number, origin: string): Server {
+export function serve(app: (req: Request) => Promise<Response>, port: number, origin: string, host = '127.0.0.1'): Server {
   const server = createServer(async (req, res) => {
     try {
       const request = await toRequest(req, origin);
@@ -61,6 +61,6 @@ export function serve(app: (req: Request) => Promise<Response>, port: number, or
       if (!res.headersSent) res.writeHead(500).end('Erreur interne');
     }
   });
-  server.listen(port);
+  server.listen(port, host);
   return server;
 }

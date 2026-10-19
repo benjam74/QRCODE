@@ -84,3 +84,12 @@ test('setCardPhoto et getCardsForUser', () => {
   setCardPhoto(db, cardId, null, NOW);
   assert.equal(getCardById(db, cardId)?.photoFile, null);
 });
+
+test('changement de ADMIN_EMAIL : même compte, même carte', () => {
+  const db = openDb(':memory:');
+  const a = ensureBootstrap(db, testConfig(), NOW);
+  const b = ensureBootstrap(db, testConfig({ adminEmail: 'nouveau@test.ch' }), NOW);
+  assert.deepEqual(b, a);
+  assert.equal((db.prepare('select email from users').get() as { email: string }).email, 'nouveau@test.ch');
+  assert.equal((db.prepare('select count(*) n from cards').get() as { n: number }).n, 1);
+});

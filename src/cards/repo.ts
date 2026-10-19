@@ -76,6 +76,12 @@ export function setCardPhoto(db: Database, cardId: number, file: string | null, 
 export function ensureBootstrap(db: Database, config: Config, now: Date): { userId: number; cardId: number } {
   return transaction(db, () => {
     let user = db.prepare('SELECT id FROM users WHERE email = ?').get(config.adminEmail) as { id: number } | undefined;
+    const all = db.prepare('SELECT id FROM users').all() as { id: number }[];
+    if (!user && all.length === 1) {
+      // v1 : un seul compte. Un changement de ADMIN_EMAIL renomme le compte au lieu d'en créer un second.
+      db.prepare('UPDATE users SET email = ? WHERE id = ?').run(config.adminEmail, all[0].id);
+      user = { id: all[0].id };
+    }
     if (!user) {
       const id = Number(db.prepare('INSERT INTO users (email, created_at) VALUES (?, ?)').run(config.adminEmail, now.toISOString()).lastInsertRowid);
       user = { id };

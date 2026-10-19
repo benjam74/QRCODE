@@ -51,6 +51,7 @@ test('ancien slug : 301 en gardant la query', async () => {
   const res = await get(app, '/c/benjamin-vallee?e=salon-rh');
   assert.equal(res.status, 301);
   assert.equal(res.headers.get('location'), '/c/nouveau?e=salon-rh');
+  assert.equal(res.headers.get('cache-control'), 'no-store');
   const vcf = await get(app, '/c/benjamin-vallee/contact.vcf');
   assert.equal(vcf.status, 301);
   assert.equal(vcf.headers.get('location'), '/c/nouveau/contact.vcf');
@@ -88,4 +89,10 @@ test('feuille de style servie', async () => {
   const res = await get(app, '/static/style.css');
   assert.equal(res.status, 200);
   assert.ok(res.headers.get('content-type')?.startsWith('text/css'));
+});
+
+test('aperçu de l administration (iframe) : pas de scan compté', async () => {
+  const { app, db } = makeApp();
+  await app(new Request('https://carte.test/c/benjamin-vallee', { headers: { 'sec-fetch-dest': 'iframe' } }));
+  assert.equal(db.prepare('select count(*) n from scans').get()!.n, 0);
 });

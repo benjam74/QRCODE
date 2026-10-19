@@ -1,6 +1,7 @@
 function cell(v: string): string {
   let s = v ?? '';
-  if (/^[=@\t\r]/.test(s) || /^[+-](?![\d\s])/.test(s)) s = `'${s}`;
+  const phoneLike = /^\+?[\d\s().\-/]+$/.test(s);
+  if (/^[=@\t\r]/.test(s) || (/^[+-]/.test(s) && !phoneLike)) s = `'${s}`;
   return `"${s.replace(/"/g, '""')}"`;
 }
 

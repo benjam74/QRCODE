@@ -8,7 +8,7 @@ COPY src ./src
 COPY static ./static
 RUN mkdir -p /data/media && chown -R node:node /data
 USER node
-ENV DATA_DIR=/data PORT=3000
+ENV DATA_DIR=/data PORT=3000 HOST=0.0.0.0
 VOLUME ["/data"]
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"

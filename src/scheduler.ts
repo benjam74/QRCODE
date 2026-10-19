@@ -19,6 +19,13 @@ export function startScheduler(deps: Deps, backupStore: BackupStore | null = nul
     if (busy) return;
     busy = true;
     try {
+      await runTick();
+    } finally {
+      busy = false;
+    }
+  };
+  const runTick = async () => {
+    try {
       await processDueLeads(deps);
     } catch (e) {
       console.error('Traitement des contacts :', e);
@@ -38,7 +45,6 @@ export function startScheduler(deps: Deps, backupStore: BackupStore | null = nul
         }).catch((err) => console.error('E-mail d\'échec de sauvegarde :', err));
       }
     }
-    busy = false;
   };
   const timer = setInterval(tick, 60_000);
   timer.unref();

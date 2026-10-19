@@ -66,7 +66,7 @@ carte.exemple.ch {
 }
 ```
 
-L'application lit l'adresse du visiteur dans le dernier élément de `X-Forwarded-For` (ajouté par le reverse proxy) pour limiter les envois abusifs.
+L'application écoute sur `127.0.0.1` par défaut (variable `HOST`) : seul le reverse proxy l'atteint. Elle lit l'adresse du visiteur dans `X-Forwarded-For` en faisant confiance à `TRUST_PROXY_HOPS` proxys (1 par défaut) pour limiter les envois abusifs (20 contacts acceptés par heure et par adresse).
 
 ## Sauvegardes
 

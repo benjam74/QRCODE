@@ -18,12 +18,15 @@ export function createRateLimiter(limit: number, windowMs: number, now: () => nu
   };
 }
 
-/** Adresse du client : dernière entrée de X-Forwarded-For (ajoutée par le proxy de confiance), sinon l'adresse de la socket. */
-export function clientIp(req: Request): string {
-  const xff = req.headers.get('x-forwarded-for');
-  if (xff) {
-    const parts = xff.split(',').map((s) => s.trim()).filter(Boolean);
-    if (parts.length) return parts[parts.length - 1];
-  }
-  return req.headers.get(REMOTE_HEADER) ?? 'inconnu';
+/**
+ * Adresse du client. Avec `trustedHops` proxys de confiance devant l'application, chacun ajoute une entrée
+ * à la fin de X-Forwarded-For : l'adresse réelle est la `trustedHops`-ième en partant de la fin.
+ * Avec 0, on ignore l'en-tête (application exposée directement).
+ */
+export function clientIp(req: Request, trustedHops: number): string {
+  const socket = req.headers.get(REMOTE_HEADER) ?? 'inconnu';
+  if (trustedHops <= 0) return socket;
+  const parts = (req.headers.get('x-forwarded-for') ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+  if (!parts.length) return socket;
+  return parts[Math.max(0, parts.length - trustedHops)];
 }

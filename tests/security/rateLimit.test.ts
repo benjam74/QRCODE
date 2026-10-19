@@ -12,8 +12,11 @@ test('5 passages puis refus, puis de nouveau après la fenêtre', () => {
   assert.equal(rl.hit('ip'), true);
 });
 
-test('clientIp prend la dernière adresse de x-forwarded-for', () => {
-  const r = new Request('http://x/', { headers: { 'x-forwarded-for': '1.1.1.1, 2.2.2.2', 'x-carte-remote-addr': '127.0.0.1' } });
-  assert.equal(clientIp(r), '2.2.2.2');
-  assert.equal(clientIp(new Request('http://x/', { headers: { 'x-carte-remote-addr': '9.9.9.9' } })), '9.9.9.9');
+test('clientIp selon le nombre de proxys de confiance', () => {
+  const r = new Request('http://x/', { headers: { 'x-forwarded-for': '1.1.1.1, 2.2.2.2, 3.3.3.3', 'x-carte-remote-addr': '127.0.0.1' } });
+  assert.equal(clientIp(r, 1), '3.3.3.3');
+  assert.equal(clientIp(r, 2), '2.2.2.2');
+  assert.equal(clientIp(r, 0), '127.0.0.1');
+  assert.equal(clientIp(r, 9), '1.1.1.1');
+  assert.equal(clientIp(new Request('http://x/', { headers: { 'x-carte-remote-addr': '9.9.9.9' } }), 1), '9.9.9.9');
 });

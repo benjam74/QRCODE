@@ -96,3 +96,10 @@ test('6e demande de lien dans l heure : refusée', async () => {
   for (let i = 0; i < 6; i++) await app(new Request(U + '/admin/login', form({ email: 'benjamin@test.ch' }, ip)));
   assert.equal(sent.length, 5);
 });
+
+test('un ancien utilisateur qui n est plus ADMIN_EMAIL ne reçoit pas de lien', async () => {
+  const { app, db, sent } = makeApp();
+  db.prepare("insert into users (email, created_at) values ('ancien@test.ch', 'x')").run();
+  await app(new Request(U + '/admin/login', form({ email: 'ancien@test.ch' }, ip)));
+  assert.equal(sent.length, 0);
+});

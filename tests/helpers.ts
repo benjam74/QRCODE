@@ -18,6 +18,8 @@ export function testConfig(over: Partial<Config> = {}): Config {
   return {
     baseUrl: 'https://carte.test',
     port: 3000,
+    host: '127.0.0.1',
+    trustProxyHops: 1,
     dataDir: '/tmp/carte-test',
     adminEmail: 'benjamin@test.ch',
     ownerName: 'Benjamin Vallée',

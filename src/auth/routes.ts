@@ -18,8 +18,9 @@ export function authRoutes(router: Router, deps: Deps): void {
   router.post('/admin/login', async (ctx) => {
     const fields = await formFields(ctx.req);
     const email = (fields.email ?? '').trim().toLowerCase();
-    if (!limiter.hit(clientIp(ctx.req))) return htmlResponse(loginPage(LOGIN_SENT));
-    const userId = email ? findUserByEmail(deps.db, email) : null;
+    if (!limiter.hit(clientIp(ctx.req, deps.config.trustProxyHops))) return htmlResponse(loginPage(LOGIN_SENT));
+    // v1 : seule l'adresse ADMIN_EMAIL peut se connecter.
+    const userId = email && email === deps.config.adminEmail ? findUserByEmail(deps.db, email) : null;
     if (userId) {
       const t = createLoginToken(deps.db, userId, deps.now());
       const link = `${deps.config.baseUrl}/admin/login/verify?token=${t}`;

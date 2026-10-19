@@ -3,7 +3,7 @@ import { phoneForDial } from './phone.ts';
 import { slugify } from './slug.ts';
 
 function esc(s: string): string {
-  return s.replace(/\\/g, '\\\\').replace(/\r\n|\r|\n/g, '\\n').replace(/,/g, '\\,').replace(/;/g, '\;');
+  return s.replace(/\\/g, '\\\\').replace(/\r\n|\r|\n/g, '\\n').replace(/,/g, '\\,').replace(/;/g, '\\;');
 }
 
 export function foldLine(line: string): string {

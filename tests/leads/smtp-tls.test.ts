@@ -87,3 +87,24 @@ test('STARTTLS absent : refus d envoyer en clair', async () => {
     assert.ok(!log.some((l) => l.startsWith('AUTH')));
   } finally { srv.close(); }
 });
+
+test('STARTTLS sans poignée de main : échec dans le délai', async () => {
+  const socks: Socket[] = [];
+  const srv = netServer((s) => {
+    socks.push(s);
+    s.write('220 plain\r\n');
+    s.on('data', (d) => {
+      const line = d.toString();
+      if (line.startsWith('EHLO')) s.write('250-fake\r\n250 STARTTLS\r\n');
+      else if (line.startsWith('STARTTLS')) s.write('220 go\r\n'); // puis silence
+    });
+  });
+  await new Promise<void>((r) => srv.listen(0, '127.0.0.1', r));
+  const port = (srv.address() as { port: number }).port;
+  try {
+    const m = createSmtpMailer({ host: 'localhost', port, user: 'u', pass: 'p', from: 'a@ex.ch' }, { tls: 'starttls', timeoutMs: 500 });
+    const t0 = Date.now();
+    await assert.rejects(m.send({ to: 'b@ex.ch', subject: 's', text: 't' }));
+    assert.ok(Date.now() - t0 < 3000);
+  } finally { socks.forEach((x) => x.destroy()); srv.close(); }
+});

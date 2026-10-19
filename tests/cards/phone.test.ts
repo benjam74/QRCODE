@@ -11,3 +11,9 @@ test('retire tirets et parenthèses', () => {
 test('vide reste vide', () => {
   assert.equal(phoneForDial('  '), '');
 });
+
+test('retire le (0) après un indicatif international', () => {
+  assert.equal(phoneForDial('+41 (0)79 123 45 67'), '+41791234567');
+  assert.equal(phoneForDial('+33 (0) 6 12 34 56 78'), '+33612345678');
+  assert.equal(phoneForDial('(022) 123 45 67'), '0221234567');
+});

@@ -13,6 +13,11 @@ import { notFoundPage } from './views/simple.ts';
 
 export const STATIC_DIR = join(import.meta.dirname, '..', '..', 'static');
 
+/** 301 non mis en cache : un retour à une ancienne adresse ne doit pas créer de boucle chez les visiteurs. */
+export function slugRedirect(location: string, status = 301): Response {
+  return new Response(null, { status, headers: { location, 'cache-control': 'no-store' } });
+}
+
 export function notFound(): Response {
   return htmlResponse(notFoundPage(), 404);
 }
@@ -21,7 +26,7 @@ export function notFound(): Response {
 export function resolveCard(deps: Deps, ctx: Ctx, suffix = ''): { card: CardFull } | Response {
   const r = getCardBySlug(deps.db, ctx.params.slug);
   if (!r) return notFound();
-  if ('redirectTo' in r) return redirect(`/c/${encodeURIComponent(r.redirectTo)}${suffix}${ctx.url.search}`, 301);
+  if ('redirectTo' in r) return slugRedirect(`/c/${encodeURIComponent(r.redirectTo)}${suffix}${ctx.url.search}`);
   return r;
 }
 
@@ -36,7 +41,7 @@ export function publicRoutes(router: Router, deps: Deps): void {
     if (r instanceof Response) return r;
     const eSlug = ctx.url.searchParams.get('e');
     const event = eSlug ? findEvent(deps.db, r.card.id, eSlug) : null;
-    if (ctx.req.method === 'GET') recordScan(deps.db, r.card.id, event?.id ?? null, deps.now().toISOString().slice(0, 10));
+    if (ctx.req.method === 'GET' && ctx.req.headers.get('sec-fetch-dest') !== 'iframe') recordScan(deps.db, r.card.id, event?.id ?? null, deps.now().toISOString().slice(0, 10));
     return htmlResponse(renderCardPage({ card: r.card, baseUrl: deps.config.baseUrl, ownerName: deps.config.ownerName, eventSlug: event ? eSlug : null }));
   });
 
@@ -56,7 +61,7 @@ export function publicRoutes(router: Router, deps: Deps): void {
 }
 
 import { validateLead, validateWaitlist } from '../leads/validate.ts';
-import { createLeadDeduped, addToWaitlist } from '../leads/repo.ts';
+import { createLeadDeduped, addToWaitlist, isDuplicateLead } from '../leads/repo.ts';
 import { createRateLimiter, clientIp } from '../security/rateLimit.ts';
 import { CONSENT_VERSION } from './views/card.ts';
 import { privacyPage, thanksPage, tooManyPage } from './views/privacy.ts';
@@ -71,16 +76,16 @@ export async function formFields(req: Request): Promise<Record<string, string>> 
 export type LeadCreatedHook = (leadId: number) => void;
 
 export function exchangeRoutes(router: Router, deps: Deps, onLeadCreated: LeadCreatedHook = () => {}): void {
-  const limiter = createRateLimiter(5, 3_600_000, () => deps.now().getTime());
+  // Compte uniquement les contacts acceptés : sur le Wi-Fi d'un salon, beaucoup de visiteurs partagent une adresse IP.
+  const limiter = createRateLimiter(20, 3_600_000, () => deps.now().getTime());
   const waitLimiter = createRateLimiter(5, 3_600_000, () => deps.now().getTime());
 
   router.get('/confidentialite', () => htmlResponse(privacyPage(deps.config.ownerName, deps.config.adminEmail)));
 
   router.post('/c/:slug/echange', async (ctx) => {
     const r = resolveCard(deps, ctx);
-    if (r instanceof Response) return r.status === 301 ? redirect(r.headers.get('location') as string, 307) : r;
+    if (r instanceof Response) return r.status === 301 ? slugRedirect(r.headers.get('location') as string, 307) : r;
     const { card } = r;
-    if (!limiter.hit(clientIp(ctx.req))) return htmlResponse(tooManyPage(card.slug), 429);
     const fields = await formFields(ctx.req);
     const v = validateLead(fields);
     const thanks = () => htmlResponse(thanksPage(card.firstName, card.slug, card.accentColor));
@@ -93,6 +98,9 @@ export function exchangeRoutes(router: Router, deps: Deps, onLeadCreated: LeadCr
       }), 422);
     }
     const event = v.value.eventSlug ? findEvent(deps.db, card.id, v.value.eventSlug) : null;
+    if (!isDuplicateLead(deps.db, card.id, v.value, deps.now()) && !limiter.hit(clientIp(ctx.req, deps.config.trustProxyHops))) {
+      return htmlResponse(tooManyPage(card.slug), 429);
+    }
     const created = createLeadDeduped(deps.db, card.id, card.userId, event?.id ?? null, v.value, CONSENT_VERSION, deps.now());
     if (!created.duplicate) onLeadCreated(created.id);
     return thanks();
@@ -100,9 +108,9 @@ export function exchangeRoutes(router: Router, deps: Deps, onLeadCreated: LeadCr
 
   router.post('/c/:slug/liste-attente', async (ctx) => {
     const r = resolveCard(deps, ctx);
-    if (r instanceof Response) return r.status === 301 ? redirect(r.headers.get('location') as string, 307) : r;
+    if (r instanceof Response) return r.status === 301 ? slugRedirect(r.headers.get('location') as string, 307) : r;
     const { card } = r;
-    if (!waitLimiter.hit(clientIp(ctx.req))) return htmlResponse(tooManyPage(card.slug), 429);
+    if (!waitLimiter.hit(clientIp(ctx.req, deps.config.trustProxyHops))) return htmlResponse(tooManyPage(card.slug), 429);
     const fields = await formFields(ctx.req);
     const v = validateWaitlist(fields);
     if (!v.ok) {

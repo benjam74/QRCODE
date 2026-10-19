@@ -30,3 +30,12 @@ test('aucune variable S3 donne s3 null', () => {
 test('BASE_URL sans slash final', () => {
   assert.equal(loadConfig({ ...ENV, BASE_URL: 'https://a.test/' }).baseUrl, 'https://a.test');
 });
+
+test('HOST et TRUST_PROXY_HOPS : valeurs par défaut et lecture', () => {
+  const c = loadConfig(ENV);
+  assert.equal(c.host, '127.0.0.1');
+  assert.equal(c.trustProxyHops, 1);
+  const d = loadConfig({ ...ENV, HOST: '0.0.0.0', TRUST_PROXY_HOPS: '2' });
+  assert.equal(d.host, '0.0.0.0');
+  assert.equal(d.trustProxyHops, 2);
+});

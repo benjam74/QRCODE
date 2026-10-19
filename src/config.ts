@@ -1,6 +1,8 @@
 export type Config = {
   baseUrl: string;
   port: number;
+  host: string;
+  trustProxyHops: number;
   dataDir: string;
   adminEmail: string;
   ownerName: string;
@@ -24,6 +26,8 @@ export function loadConfig(env: Record<string, string | undefined>): Config {
   return {
     baseUrl: v('BASE_URL').replace(/\/+$/, ''),
     port: Number(env.PORT ?? 3000),
+    host: env.HOST || '127.0.0.1',
+    trustProxyHops: Math.max(0, Number(env.TRUST_PROXY_HOPS ?? 1) || 0),
     dataDir: v('DATA_DIR'),
     adminEmail: v('ADMIN_EMAIL').trim().toLowerCase(),
     ownerName: v('OWNER_NAME'),

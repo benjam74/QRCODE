@@ -28,12 +28,12 @@ test('nom, fonction, téléphone, e-mail', () => {
 
 test('pas de ligne ORG sans société, ORG avec', () => {
   assert.ok(!buildVCard(card(), null).includes('ORG'));
-  assert.ok(buildVCard(card({ company: 'Vallée; Conseil' }), null).includes('\r\nORG:Vallée\; Conseil\r\n'));
+  assert.ok(buildVCard(card({ company: 'Vallée; Conseil' }), null).includes('\r\nORG:Vallée\\; Conseil\r\n'));
 });
 
 test('champ libre texte va dans NOTE, échappé', () => {
   const v = buildVCard(card({ fields: [{ label: 'Adresse', value: '1 rue X; Annecy' }, { label: 'Horaires', value: 'lun-ven\nsur RDV' }] }), null);
-  assert.ok(v.includes('NOTE:Adresse : 1 rue X\; Annecy\\nHoraires : lun-ven\\nsur RDV'));
+  assert.ok(v.includes('NOTE:Adresse : 1 rue X\\; Annecy\\nHoraires : lun-ven\\nsur RDV'));
 });
 
 test('champ libre lien devient URL', () => {
@@ -60,4 +60,9 @@ test('photo en base64, lignes repliées à 75 octets', () => {
 
 test('nom de fichier', () => {
   assert.equal(vcardFilename(card()), 'benjamin-vallee.vcf');
+});
+
+test('point-virgule et virgule échappés dans N', () => {
+  const v = buildVCard(card({ lastName: 'Dupont; Durand', firstName: 'Jean, Paul' }), null);
+  assert.ok(v.includes('\r\nN:Dupont\\; Durand;Jean\\, Paul;;;\r\n'));
 });

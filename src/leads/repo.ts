@@ -57,6 +57,13 @@ export function getLead(db: Database, id: number): LeadRow | null {
 
 export const DEDUPE_WINDOW_MS = 10 * 60_000;
 
+export function isDuplicateLead(db: Database, cardId: number, input: LeadInput, now: Date): boolean {
+  const since = new Date(now.getTime() - DEDUPE_WINDOW_MS).toISOString();
+  const recent = db.prepare('SELECT email, phone FROM leads WHERE card_id = ? AND created_at >= ?').all(cardId, since) as { email: string | null; phone: string | null }[];
+  const tel = input.phone ? phoneForDial(input.phone) : null;
+  return recent.some((r) => (input.email && r.email === input.email) || (tel && r.phone && phoneForDial(r.phone) === tel));
+}
+
 export function createLeadDeduped(
   db: Database, cardId: number, userId: number, eventId: number | null, input: LeadInput, consentVersion: string, now: Date,
 ): { id: number; duplicate: boolean } {

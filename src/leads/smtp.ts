@@ -119,8 +119,9 @@ class SmtpConnection {
     plain.removeAllListeners('error');
     plain.removeAllListeners('timeout');
     const secure = await new Promise<TLSSocket>((resolve, reject) => {
-      const s = tlsConnect({ socket: plain, servername: host, ca }, () => resolve(s));
-      s.once('error', reject);
+      const timer = setTimeout(() => { s.destroy(); plain.destroy(); reject(new Error('Délai STARTTLS dépassé')); }, timeoutMs);
+      const s = tlsConnect({ socket: plain, servername: host, ca }, () => { clearTimeout(timer); resolve(s); });
+      s.once('error', (e) => { clearTimeout(timer); reject(e); });
     });
     secure.setTimeout(timeoutMs);
     this.sock = secure;
@@ -128,6 +129,7 @@ class SmtpConnection {
   }
 
   end() { this.sock.end(); }
+  destroy() { this.sock.destroy(); }
 }
 
 function open(host: string, port: number, mode: TlsMode, timeoutMs: number, ca?: string): Promise<Socket | TLSSocket> {
@@ -141,35 +143,45 @@ function open(host: string, port: number, mode: TlsMode, timeoutMs: number, ca?:
   });
 }
 
+async function dialog(conn: SmtpConnection, msg: MailMessage, smtp: Config['smtp'], mode: TlsMode, timeoutMs: number, ca?: string): Promise<void> {
+  await conn.reply([220]);
+  const ehlo = 'EHLO carte-qr';
+  const caps = await conn.command(ehlo, [250]);
+  if (mode === 'starttls') {
+    if (!caps.some((l) => /STARTTLS/i.test(l))) throw new Error('Le serveur SMTP ne propose pas STARTTLS');
+    await conn.command('STARTTLS', [220]);
+    await conn.upgrade(smtp.host, timeoutMs, ca);
+    await conn.command(ehlo, [250]);
+  }
+  const auth = Buffer.from(`\0${smtp.user}\0${smtp.pass}`, 'utf8').toString('base64');
+  await conn.command(`AUTH PLAIN ${auth}`, [235]);
+  const from = parseAddress(smtp.from).address;
+  const to = parseAddress(msg.to).address;
+  await conn.command(`MAIL FROM:<${from}>`, [250]);
+  await conn.command(`RCPT TO:<${to}>`, [250, 251]);
+  await conn.command('DATA', [354]);
+  const domain = from.split('@')[1] ?? 'carte-qr';
+  const mime = buildMime({ ...msg, from: smtp.from, date: new Date(), messageId: `<${randomBytes(16).toString('hex')}@${domain}>` });
+  conn.write(mime.replace(/^\./gm, '..') + '\r\n.\r\n');
+  await conn.reply([250]);
+  await conn.command('QUIT', [221]).catch(() => {});
+}
+
 export function createSmtpMailer(smtp: Config['smtp'], opts: { tls?: TlsMode; timeoutMs?: number; ca?: string } = {}): Mailer {
   const mode: TlsMode = opts.tls ?? (smtp.port === 465 ? 'implicit' : 'starttls');
   const timeoutMs = opts.timeoutMs ?? 20_000;
   return {
     async send(msg: MailMessage): Promise<void> {
       const conn = new SmtpConnection(await open(smtp.host, smtp.port, mode, timeoutMs, opts.ca));
+      // Délai global : aucun envoi ne peut rester bloqué plus de 3 fois le délai unitaire.
+      let deadline: NodeJS.Timeout | undefined;
+      const expired = new Promise<never>((_, reject) => {
+        deadline = setTimeout(() => { conn.destroy(); reject(new Error("Délai global d'envoi SMTP dépassé")); }, timeoutMs * 3);
+      });
       try {
-        await conn.reply([220]);
-        const ehlo = 'EHLO carte-qr';
-        let caps = await conn.command(ehlo, [250]);
-        if (mode === 'starttls') {
-          if (!caps.some((l) => /STARTTLS/i.test(l))) throw new Error('Le serveur SMTP ne propose pas STARTTLS');
-          await conn.command('STARTTLS', [220]);
-          await conn.upgrade(smtp.host, timeoutMs, opts.ca);
-          caps = await conn.command(ehlo, [250]);
-        }
-        const auth = Buffer.from(`\0${smtp.user}\0${smtp.pass}`, 'utf8').toString('base64');
-        await conn.command(`AUTH PLAIN ${auth}`, [235]);
-        const from = parseAddress(smtp.from).address;
-        const to = parseAddress(msg.to).address;
-        await conn.command(`MAIL FROM:<${from}>`, [250]);
-        await conn.command(`RCPT TO:<${to}>`, [250, 251]);
-        await conn.command('DATA', [354]);
-        const domain = from.split('@')[1] ?? 'carte-qr';
-        const mime = buildMime({ ...msg, from: smtp.from, date: new Date(), messageId: `<${randomBytes(16).toString('hex')}@${domain}>` });
-        conn.write(mime.replace(/^\./gm, '..') + '\r\n.\r\n');
-        await conn.reply([250]);
-        await conn.command('QUIT', [221]).catch(() => {});
+        await Promise.race([dialog(conn, msg, smtp, mode, timeoutMs, opts.ca), expired]);
       } finally {
+        clearTimeout(deadline);
         conn.end();
       }
     },
