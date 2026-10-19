@@ -1,0 +1,23 @@
+import { existsSync, mkdirSync } from 'node:fs';
+import { join } from 'node:path';
+import { loadConfig } from './config.ts';
+import { openDb } from './db/index.ts';
+import { createApp } from './app.ts';
+import { serve } from './http/serve.ts';
+import { ensureBootstrap } from './cards/repo.ts';
+import { createSmtpMailer } from './leads/smtp.ts';
+import { startScheduler } from './scheduler.ts';
+import { createS3Store } from './backup/s3.ts';
+
+if (existsSync('.env')) process.loadEnvFile('.env');
+const config = loadConfig(process.env);
+mkdirSync(join(config.dataDir, 'media'), { recursive: true });
+const db = openDb(join(config.dataDir, 'carte.db'));
+ensureBootstrap(db, config, new Date());
+const mailer = createSmtpMailer(config.smtp);
+const deps = { db, config, now: () => new Date(), fetch, mailer };
+const app = createApp(deps);
+serve(app, config.port, config.baseUrl, config.host);
+startScheduler(deps, config.s3 ? createS3Store(config.s3) : null);
+if (!config.s3) console.warn('Attention : aucune sauvegarde configurée (variables S3_*).');
+console.log(`Carte QR en écoute sur ${config.host}:${config.port}`);
